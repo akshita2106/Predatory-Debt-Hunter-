@@ -1,0 +1,8 @@
+{
+  "name": "Predatory Debt Hunter",
+  "description": "An AI financial bodyguard that protects users from predatory financial documents, analyzes risk, simulates scenarios, and assists in negotiation.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

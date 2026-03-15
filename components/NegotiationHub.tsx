@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateNegotiationContent } from '../services/geminiService';
-import { DocumentAnalysis } from '../types';
+import { DocumentAnalysis, UserSettings } from '../types';
 import { Mail, PhoneCall, Copy, Check, MessageSquare, Mic, StopCircle, Zap, Volume2, Sparkles } from 'lucide-react';
 
 interface NegotiationHubProps {
-  currentDoc: DocumentAnalysis | null;
+  analysis: DocumentAnalysis | null;
+  userSettings?: UserSettings;
 }
 
-const NegotiationHub: React.FC<NegotiationHubProps> = ({ currentDoc }) => {
+const NegotiationHub: React.FC<NegotiationHubProps> = ({ analysis, userSettings }) => {
   const [activeTab, setActiveTab] = useState<'script' | 'email'>('script');
   const [goal, setGoal] = useState('Waive the late fee');
+  const [tone, setTone] = useState('Professional & Firm');
+  const [additionalContext, setAdditionalContext] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -21,10 +24,10 @@ const NegotiationHub: React.FC<NegotiationHubProps> = ({ currentDoc }) => {
   const timerRef = useRef<number | null>(null);
 
   const handleGenerate = async () => {
-    if (!currentDoc) return;
+    if (!analysis) return;
     setIsGenerating(true);
     setVoiceFeedback(null);
-    const content = await generateNegotiationContent(currentDoc, activeTab, goal);
+    const content = await generateNegotiationContent(analysis, activeTab, goal, tone, additionalContext);
     setGeneratedContent(content);
     setIsGenerating(false);
     setCopied(false);
@@ -80,7 +83,7 @@ const NegotiationHub: React.FC<NegotiationHubProps> = ({ currentDoc }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (!currentDoc) {
+  if (!analysis) {
     return (
       <div className="text-center p-12 bg-slate-800 rounded-xl border border-slate-700 border-dashed animate-fade-in">
         <MessageSquare className="mx-auto h-12 w-12 text-slate-600 mb-4" />
@@ -100,7 +103,7 @@ const NegotiationHub: React.FC<NegotiationHubProps> = ({ currentDoc }) => {
                 Negotiation Assistant
             </h2>
             <p className="text-slate-400 text-sm">
-                Active Target: <span className="text-emerald-400 font-semibold px-2 py-0.5 bg-slate-700/50 rounded-md border border-slate-600">{currentDoc.fileName}</span>
+                Active Target: <span className="text-emerald-400 font-semibold px-2 py-0.5 bg-slate-700/50 rounded-md border border-slate-600">{analysis.fileName}</span>
             </p>
          </div>
 
@@ -140,11 +143,39 @@ const NegotiationHub: React.FC<NegotiationHubProps> = ({ currentDoc }) => {
                                 <option value="Negotiate a payment plan">Negotiate a Payment Plan (EMI)</option>
                                 <option value="Dispute a charge">Dispute a Fraudulent Charge</option>
                                 <option value="Settlement offer">Offer a Lump-sum Settlement</option>
+                                <option value="Request debt validation">Request Debt Validation (Legal)</option>
+                                <option value="Remove from credit report">Remove Negative Mark from Credit Report</option>
+                                <option value="Hardship deferral">Request Financial Hardship Deferral</option>
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                             </div>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Tone of Voice</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['Professional & Firm', 'Empathetic & Cooperative', 'Strict & Legalistic', 'Persistent & Direct'].map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setTone(t)}
+                                    className={`py-2 px-3 rounded-lg text-xs font-medium border transition-all ${tone === t ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-600'}`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Additional Context (Optional)</label>
+                        <textarea 
+                            value={additionalContext}
+                            onChange={(e) => setAdditionalContext(e.target.value)}
+                            placeholder="e.g. I lost my job last month, or I have a medical emergency..."
+                            className="w-full bg-slate-900 border border-slate-600 text-white rounded-xl p-4 min-h-[100px] outline-none focus:border-blue-500 transition-all resize-none text-sm"
+                        />
                     </div>
 
                     <button 

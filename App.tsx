@@ -7,13 +7,16 @@ import NegotiationHub from './components/NegotiationHub';
 import AuthPage from './components/AuthPage';
 import TriageCenter from './components/TriageCenter';
 import DebtFormModal from './components/DebtFormModal';
+import ProfileSetup from './components/ProfileSetup';
+import Settings from './components/Settings';
 import { authService } from './services/authService';
 import { debtService } from './services/debtService';
-import { Shield, FileText, Activity, MessageSquare, Menu, X, LayoutDashboard, LogOut, User as UserIcon, ListTodo } from 'lucide-react';
+import { Shield, FileText, Activity, MessageSquare, Menu, X, LayoutDashboard, LogOut, User as UserIcon, ListTodo, Loader2, Settings as SettingsIcon } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<'scan' | 'triage' | 'dashboard' | 'simulator' | 'negotiate'>('scan');
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [currentView, setCurrentView] = useState<'scan' | 'triage' | 'dashboard' | 'simulator' | 'negotiate' | 'settings'>('scan');
   const [documents, setDocuments] = useState<DocumentAnalysis[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -22,23 +25,21 @@ const App: React.FC = () => {
   const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
   const [docToSave, setDocToSave] = useState<DocumentAnalysis | null>(null);
 
-  // Negotiation Context State
-  const [negotiationTask, setNegotiationTask] = useState<DebtTask | null>(null);
-
   // Check for existing session on load
   useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (user) {
-        setCurrentUser(user);
-    }
+    const unsubscribe = authService.onAuthStateChange((user) => {
+      setCurrentUser(user);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
   };
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    await authService.logout();
     setCurrentUser(null);
     setDocuments([]);
     setSelectedDocId(null);
@@ -100,7 +101,7 @@ const App: React.FC = () => {
       }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
         currentView === view 
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20' 
           : 'text-slate-400 hover:bg-slate-800 hover:text-white'
       }`}
     >
@@ -109,13 +110,26 @@ const App: React.FC = () => {
     </button>
   );
 
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="text-emerald-500 animate-spin" size={48} />
+      </div>
+    );
+  }
+
   // If not logged in, show Auth Page
   if (!currentUser) {
     return <AuthPage onLogin={handleLogin} />;
   }
 
+  // If logged in but setup not complete
+  if (!currentUser.hasCompletedSetup) {
+    return <ProfileSetup user={currentUser} onComplete={(updated) => setCurrentUser(updated)} />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Mobile Header */}
       <div className="lg:hidden p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center sticky top-0 z-50">
@@ -140,7 +154,7 @@ const App: React.FC = () => {
                 <Shield className="text-emerald-500" size={24} />
             </div>
             <div>
-                <h1 className="font-bold text-xl text-white tracking-tight">Predatory<br/>Debt Hunter</h1>
+                <h1 className="font-bold text-xl text-white tracking-tight leading-tight">Predatory<br/>Debt Hunter</h1>
             </div>
           </div>
 
@@ -150,13 +164,18 @@ const App: React.FC = () => {
             {currentDoc && <NavItem view="dashboard" icon={<LayoutDashboard size={20} />} label="Risk Analysis" />}
             <NavItem view="simulator" icon={<Activity size={20} />} label="Simulator" />
             <NavItem view="negotiate" icon={<MessageSquare size={20} />} label="Negotiation" />
+            <NavItem view="settings" icon={<SettingsIcon size={20} />} label="Settings" />
           </nav>
 
           {/* User Profile & Logout */}
           <div className="mt-8 pt-6 border-t border-slate-800">
              <div className="flex items-center gap-3 px-2 mb-4">
-                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
-                    <UserIcon size={16} />
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 overflow-hidden">
+                    {currentUser.photoURL ? (
+                        <img src={currentUser.photoURL} alt={currentUser.name} className="w-full h-full object-cover" />
+                    ) : (
+                        <UserIcon size={16} />
+                    )}
                 </div>
                 <div className="flex-1 overflow-hidden">
                     <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
@@ -191,6 +210,7 @@ const App: React.FC = () => {
                         user={currentUser} 
                         onNegotiate={handleNavigateToNegotiate}
                         onOpenDoc={(id) => { setSelectedDocId(id); setCurrentView('dashboard'); }}
+                        onOpenSettings={() => setCurrentView('settings')}
                     />
                 </div>
             )}
@@ -202,42 +222,42 @@ const App: React.FC = () => {
                     onSaveToTriage={handleOpenSaveModal}
                  />
                ) : (
-                 <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-                    <Shield size={64} className="text-slate-700 mb-4" />
-                    <h2 className="text-xl font-bold text-slate-400">No Analysis Available</h2>
-                    <p className="text-slate-500 mt-2 mb-6">Scan a document to view the risk dashboard.</p>
-                    <button 
-                        onClick={() => setCurrentView('scan')}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
-                    >
-                        Go to Scanner
-                    </button>
+                 <div className="flex flex-col items-center justify-center h-96 text-slate-500">
+                    <FileText size={64} className="mb-4 opacity-20" />
+                    <p>No document selected. Please scan one first.</p>
                  </div>
                )
             )}
 
             {currentView === 'simulator' && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <FinanceSimulator user={currentUser} />
-                </div>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <FinanceSimulator user={currentUser} />
+              </div>
             )}
 
             {currentView === 'negotiate' && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <NegotiationHub currentDoc={currentDoc} />
-                </div>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <NegotiationHub analysis={currentDoc} userSettings={currentUser.settings} />
+              </div>
+            )}
+
+            {currentView === 'settings' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <Settings user={currentUser} onUpdateUser={(updated) => setCurrentUser(updated)} />
+              </div>
             )}
           </div>
         </main>
       </div>
 
       {/* Modals */}
-      {docToSave && (
+      {isDebtModalOpen && docToSave && (
           <DebtFormModal 
-              isOpen={isDebtModalOpen} 
-              onClose={() => setIsDebtModalOpen(false)} 
-              analysis={docToSave}
-              onSave={handleSaveDebt}
+            isOpen={isDebtModalOpen}
+            onClose={() => setIsDebtModalOpen(false)}
+            onSave={handleSaveDebt}
+            analysis={docToSave}
+            userSettings={currentUser.settings}
           />
       )}
     </div>

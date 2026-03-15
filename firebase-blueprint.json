@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "currency": { "type": "string" },
+        "location": { "type": "string" },
+        "occupation": { "type": "string" },
+        "hasCompletedSetup": { "type": "boolean" },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "deleteCompletedAfterDays": { "type": "number" },
+            "currencySymbol": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "email", "name", "currency", "hasCompletedSetup"]
+    },
+    "FinancialProfile": {
+      "title": "FinancialProfile",
+      "description": "User's current financial snapshot",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "monthlySalary": { "type": "number" },
+        "currentSavings": { "type": "number" },
+        "expenses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "monthlySalary", "currentSavings", "expenses", "updatedAt"]
+    },
+    "SavedScenario": {
+      "title": "SavedScenario",
+      "description": "A saved financial simulation scenario",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "salary": { "type": "number" },
+        "savings": { "type": "number" },
+        "expenses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "scenarioType": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "userId", "name", "salary", "savings", "expenses", "scenarioType", "timestamp"]
+    },
+    "DebtTask": {
+      "title": "DebtTask",
+      "description": "A debt obligation or financial task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "issuer": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string" },
+        "riskLevel": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "completedAt": { "type": "number" },
+        "proofOfPayment": { "type": "string" },
+        "analysisId": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "amount", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/financialProfiles/{userId}": {
+      "schema": "FinancialProfile",
+      "description": "User financial snapshots"
+    },
+    "/savedScenarios/{scenarioId}": {
+      "schema": "SavedScenario",
+      "description": "Saved financial scenarios"
+    },
+    "/debts/{debtId}": {
+      "schema": "DebtTask",
+      "description": "User debt obligations"
+    }
+  }
+}

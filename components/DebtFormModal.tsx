@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { DocumentAnalysis, DebtTask, DebtCategory, DebtPriority } from '../types';
-import { X, Calendar, DollarSign, Tag, AlertCircle, FileText } from 'lucide-react';
+import { DocumentAnalysis, DebtTask, DebtCategory, DebtPriority, UserSettings } from '../types';
+import { X, Calendar, Tag, AlertCircle, FileText } from 'lucide-react';
+import { convertToBase, convertFromBase } from '../services/currencyUtils';
 
 interface DebtFormModalProps {
   analysis: DocumentAnalysis;
   isOpen: boolean;
   onClose: () => void;
-  // Fix: The onSave callback is called with an object that includes 'status', so we must not omit it from the type.
   onSave: (task: Omit<DebtTask, 'id' | 'userId' | 'createdAt'>) => void;
+  userSettings?: UserSettings;
 }
 
-const DebtFormModal: React.FC<DebtFormModalProps> = ({ analysis, isOpen, onClose, onSave }) => {
+const DebtFormModal: React.FC<DebtFormModalProps> = ({ analysis, isOpen, onClose, onSave, userSettings }) => {
   const [formData, setFormData] = useState({
     title: '',
     issuer: '',
@@ -21,17 +22,24 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({ analysis, isOpen, onClose
     notes: ''
   });
 
+  const currencySymbol = userSettings?.currencySymbol || '$';
+  const currencyCode = userSettings?.currencyCode || 'USD';
+
   useEffect(() => {
     if (isOpen && analysis) {
         // Attempt to auto-extract
         const amountObj = analysis.extractedAmounts.find(a => a.label.toLowerCase().includes('total') || a.label.toLowerCase().includes('due'));
-        const rawAmount = amountObj ? amountObj.amount.replace(/[^0-9.]/g, '') : '0';
+        const rawAmountStr = amountObj ? amountObj.amount.replace(/[^0-9.]/g, '') : '0';
+        const rawAmount = parseFloat(rawAmountStr) || 0;
+        
+        // Convert from base (assuming AI extracts in base/USD) to user currency for display
+        const displayAmount = convertFromBase(rawAmount, currencyCode).toFixed(2);
         
         setFormData({
             title: `Processed: ${analysis.fileName}`,
-            issuer: 'Unknown Issuer', // AI would ideally extract this specifically
-            amount: rawAmount,
-            dueDate: '', // AI date extraction placeholder
+            issuer: 'Unknown Issuer', 
+            amount: displayAmount,
+            dueDate: '', 
             category: analysis.riskLevel === 'PREDATORY' ? 'loan' : 'bill',
             priority: analysis.riskLevel === 'URGENT' ? 'urgent' : 'normal',
             notes: analysis.summary
@@ -43,10 +51,14 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({ analysis, isOpen, onClose
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const amountInUserCurrency = parseFloat(formData.amount) || 0;
+    // Convert to base currency (USD) for storage
+    const amountInBase = convertToBase(amountInUserCurrency, currencyCode);
+
     onSave({
         title: formData.title,
         issuer: formData.issuer,
-        amount: parseFloat(formData.amount) || 0,
+        amount: amountInBase,
         dueDate: formData.dueDate ? new Date(formData.dueDate).getTime() : null,
         category: formData.category,
         priority: formData.priority,
@@ -90,9 +102,9 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({ analysis, isOpen, onClose
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Amount Due</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Amount Due ({currencyCode})</label>
                     <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">{currencySymbol}</span>
                         <input 
                             type="number" 
                             value={formData.amount} 

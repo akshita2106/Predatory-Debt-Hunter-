@@ -46,13 +46,35 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  photoURL?: string;
+  currency: string;
+  location?: string;
+  occupation?: string;
+  hasCompletedSetup: boolean;
+  settings?: UserSettings;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export interface FinancialProfile {
+  userId: string;
+  monthlySalary: number;
+  currentSavings: number;
+  expenses: ExpenseCategory[];
+  updatedAt: number;
 }
 
 export interface SavedScenario {
   id: string;
+  userId: string;
   name: string;
+  salary: number;
   savings: number;
-  expenses: number;
+  expenses: ExpenseCategory[];
   scenarioType: string;
   timestamp: number;
 }
@@ -82,4 +104,5 @@ export interface DebtTask {
 export interface UserSettings {
   deleteCompletedAfterDays: number; // e.g., 30
   currencySymbol: string;
+  currencyCode: string; // e.g., USD, EUR, INR
 }

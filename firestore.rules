@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId
+    // Fields:
+    //   - id: string (required)
+    //   - email: string (required)
+    //   - name: string (required)
+    //   - photoURL: string (optional)
+    //   - currency: string (required)
+    //   - location: string (optional)
+    //   - occupation: string (optional)
+    //   - hasCompletedSetup: boolean (required)
+    //   - settings: map (optional)
+    //
+    // Collection: financialProfiles
+    // Document ID: userId
+    // Fields:
+    //   - userId: string (required)
+    //   - monthlySalary: number (required)
+    //   - currentSavings: number (required)
+    //   - expenses: list (required)
+    //   - updatedAt: number (required)
+    //
+    // Collection: savedScenarios
+    // Document ID: scenarioId
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - salary: number (required)
+    //   - savings: number (required)
+    //   - expenses: list (required)
+    //   - scenarioType: string (required)
+    //   - timestamp: number (required)
+    //
+    // Collection: debts
+    // Document ID: debtId
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - title: string (required)
+    //   - issuer: string (optional)
+    //   - amount: number (required)
+    //   - dueDate: string (optional)
+    //   - category: string (optional)
+    //   - priority: string (optional)
+    //   - riskLevel: string (optional)
+    //   - status: string (required)
+    //   - createdAt: number (required)
+    //   - completedAt: number (optional)
+    //   - proofOfPayment: string (optional)
+    //   - analysisId: string (optional)
+    //   - notes: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isRequestOwner() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.userId;
+    }
+
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function hasRequiredFields(requiredFields) {
+      return request.resource.data.keys().hasAll(requiredFields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.id is string &&
+             data.email is string &&
+             data.name is string &&
+             data.currency is string &&
+             data.hasCompletedSetup is bool &&
+             data.name.size() < 100 &&
+             data.email.size() < 100;
+    }
+
+    function isValidFinancialProfile(data) {
+      return data.userId is string &&
+             data.monthlySalary is number &&
+             data.currentSavings is number &&
+             data.expenses is list &&
+             data.updatedAt is number;
+    }
+
+    function isValidSavedScenario(data) {
+      return data.id is string &&
+             data.userId is string &&
+             data.name is string &&
+             data.salary is number &&
+             data.savings is number &&
+             data.expenses is list &&
+             data.scenarioType is string &&
+             data.timestamp is number;
+    }
+
+    function isValidDebtTask(data) {
+      return data.userId is string &&
+             data.title is string &&
+             data.amount is number &&
+             data.status is string &&
+             data.createdAt is number &&
+             data.title.size() < 200;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if false; // Users shouldn't be able to delete their profiles easily
+    }
+
+    match /financialProfiles/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidFinancialProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidFinancialProfile(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    match /savedScenarios/{scenarioId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidSavedScenario(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidSavedScenario(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /debts/{debtId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isAuthenticated() && request.query.limit <= 100; // Basic list protection, query must filter by userId
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidDebtTask(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidDebtTask(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

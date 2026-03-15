@@ -77,7 +77,9 @@ export const analyzeDocument = async (file: File): Promise<DocumentAnalysis> => 
 export const generateNegotiationContent = async (
   docContext: DocumentAnalysis,
   type: 'email' | 'script' | 'letter',
-  userGoal: string
+  userGoal: string,
+  tone: string = 'Professional & Firm',
+  additionalContext: string = ''
 ): Promise<string> => {
   const model = "gemini-2.5-flash";
 
@@ -88,8 +90,16 @@ export const generateNegotiationContent = async (
     
     Task: Generate a ${type} for the user to negotiate with the issuer.
     User Goal: ${userGoal}
+    Desired Tone: ${tone}
+    Additional User Context: ${additionalContext}
     
-    Tone: Professional, firm, polite, but assertive. Cite consumer rights loosely if applicable (generic context).
+    Guidelines:
+    - Be ${tone}.
+    - Cite consumer protection principles where relevant.
+    - If it's a script, include placeholders for names and dates.
+    - If it's an email, include a clear subject line.
+    - Focus on the user's goal: ${userGoal}.
+    
     Format: Return just the text content of the ${type}.
   `;
 
@@ -107,19 +117,30 @@ export const generateNegotiationContent = async (
 
 export const simulateScenarioAdvice = async (
   currentSavings: number,
+  monthlySalary: number,
   monthlyExpenses: number,
-  scenario: string
+  scenario: string,
+  currency: string = 'USD'
 ): Promise<string> => {
    const model = "gemini-2.5-flash";
+   const disposableIncome = monthlySalary - monthlyExpenses;
    const prompt = `
-    You are a personal finance simulator.
+    You are an AI Financial Advisor for "Predatory Debt Hunter".
     User Data:
-    - Current Savings: $${currentSavings}
-    - Monthly Expenses: $${monthlyExpenses}
+    - Monthly Salary: ${currency} ${monthlySalary}
+    - Current Savings: ${currency} ${currentSavings}
+    - Monthly Expenses: ${currency} ${monthlyExpenses}
+    - Disposable Income: ${currency} ${disposableIncome}
     
     Scenario to Simulate: ${scenario}
     
-    Provide a brief (3-4 sentences) analysis of how this scenario impacts their runway and risk exposure. Be realistic but helpful.
+    Task:
+    1. Analyze the impact of the scenario on their financial health.
+    2. Provide specific, actionable advice based on their disposable income.
+    3. If disposable income > 500, suggest allocations for emergency funds, index funds, and fixed income assets.
+    4. Keep it concise (4-5 sentences).
+    
+    Tone: Professional, empathetic, and data-driven.
    `;
 
    try {

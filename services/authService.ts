@@ -13,10 +13,15 @@ import { User } from "../types";
 import { handleFirestoreError, OperationType, cleanObject } from './firestoreUtils';
 
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({
+  prompt: 'select_account'
+});
 
-// Helper to detect mobile devices
+// Helper to detect mobile devices or tablets
 const isMobile = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || 
+         (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform));
 };
 
 export const authService = {
@@ -26,11 +31,14 @@ export const authService = {
    */
   async _getOrCreateUserDoc(firebaseUser: FirebaseUser): Promise<User> {
     try {
+      console.log("Fetching/Creating user doc for:", firebaseUser.uid);
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
       
       if (userDoc.exists()) {
+        console.log("User doc exists");
         return userDoc.data() as User;
       } else {
+        console.log("Creating new user doc");
         // Create new user profile
         const newUser: User = {
           id: firebaseUser.uid,
@@ -44,6 +52,7 @@ export const authService = {
         return newUser;
       }
     } catch (error) {
+      console.error("Error in _getOrCreateUserDoc:", error);
       handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
       throw error;
     }
@@ -52,11 +61,10 @@ export const authService = {
   async signInWithGoogle(): Promise<User | void> {
     try {
       if (isMobile()) {
-        // On mobile, use redirect to avoid sessionStorage/popup issues
-        // We wrap it in a try-catch to handle immediate failures
+        console.log("Mobile detected, using redirect");
         return await signInWithRedirect(auth, provider);
       } else {
-        // On desktop, use popup for better UX
+        console.log("Desktop detected, using popup");
         const result = await signInWithPopup(auth, provider);
         return await this._getOrCreateUserDoc(result.user);
       }
@@ -67,6 +75,7 @@ export const authService = {
       // we can try popup as a last resort even on mobile
       if (isMobile() && (error.code === 'auth/operation-not-supported-in-this-environment' || error.message?.includes('storage'))) {
         try {
+          console.log("Redirect failed or unsupported, trying popup fallback");
           const result = await signInWithPopup(auth, provider);
           return await this._getOrCreateUserDoc(result.user);
         } catch (popupError) {
@@ -85,26 +94,28 @@ export const authService = {
     // Check for redirect result on initialization
     getRedirectResult(auth).then(async (result) => {
       if (result?.user) {
+        console.log("Redirect result found for user:", result.user.uid);
         await this._getOrCreateUserDoc(result.user);
       }
     }).catch(error => {
       console.error("Error handling redirect result:", error);
-      // Specific handling for the error in the screenshot
-      if (error.message?.includes('missing initial state')) {
-        console.warn("Detected missing initial state. This is common in some mobile browsers. Retrying with popup might be necessary.");
-      }
     });
 
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        console.log("Auth state changed: User logged in", firebaseUser.uid);
         try {
-          // Ensure the user profile exists in Firestore (handles redirect flow)
           const user = await this._getOrCreateUserDoc(firebaseUser);
           callback(user);
         } catch (error) {
+          console.error("Failed to sync user doc on auth change:", error);
+          // If we can't get the doc, we might still want to show the user as logged in
+          // but the app expects a full User object. 
+          // For now, we call callback(null) to force a retry/login if it's a fatal error
           callback(null);
         }
       } else {
+        console.log("Auth state changed: No user");
         callback(null);
       }
     });

@@ -98,8 +98,8 @@ service cloud.firestore {
              data.name is string &&
              data.currency is string &&
              data.hasCompletedSetup is bool &&
-             data.name.size() < 100 &&
-             data.email.size() < 100;
+             data.name.size() < 200 &&
+             data.email.size() < 200;
     }
 
     function isValidFinancialProfile(data) {

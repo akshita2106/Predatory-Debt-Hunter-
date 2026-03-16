@@ -27,7 +27,9 @@ const App: React.FC = () => {
 
   // Check for existing session on load
   useEffect(() => {
+    console.log("App: Initializing auth listener");
     const unsubscribe = authService.onAuthStateChange((user) => {
+      console.log("App: Auth state changed", user ? user.email : "null");
       setCurrentUser(user);
       setIsAuthReady(true);
     });
@@ -35,6 +37,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = (user: User) => {
+    console.log("App: handleLogin called", user.email);
     setCurrentUser(user);
   };
 

@@ -20,8 +20,19 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         onLogin(user);
       }
     } catch (err: any) {
-      console.error(err);
-      setError("Failed to sign in with Google. Please try again.");
+      console.error("AuthPage Error:", err);
+      
+      // Handle specific Firebase Auth errors
+      if (err.code === 'auth/popup-closed-by-user') {
+        // Don't show a scary error for a user cancellation, just reset
+        setError(null); 
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        setError("Sign-in request was cancelled. Please try again.");
+      } else if (err.code === 'auth/popup-blocked') {
+        setError("Sign-in popup was blocked by your browser. Please allow popups for this site.");
+      } else {
+        setError("Failed to sign in with Google. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -57,10 +68,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none"
+            className={`w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg transition-all transform active:scale-95 disabled:opacity-70 disabled:transform-none ${loading ? 'cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
           >
             {loading ? (
-              <Loader2 className="animate-spin" size={20} />
+              <div className="flex items-center gap-2">
+                <Loader2 className="animate-spin" size={20} />
+                <span>Connecting...</span>
+              </div>
             ) : (
               <>
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />

@@ -1,4 +1,4 @@
-import { GoogleGenAI, Schema } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { DocumentAnalysis, RiskLevel } from "../types";
 
 const apiKey = process.env.API_KEY || '';

@@ -4,7 +4,9 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
+  browserLocalPersistence,
+  setPersistence
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { User } from "../types";
@@ -14,8 +16,9 @@ const provider = new GoogleAuthProvider();
 
 export const authService = {
   async signInWithGoogle(): Promise<User> {
+    await setPersistence(auth, browserLocalPersistence);
     const result = await signInWithPopup(auth, provider);
-    const firebaseUser = result.user;
+    //const firebaseUser = result.user;
     
     // Check if user exists in Firestore
     try {

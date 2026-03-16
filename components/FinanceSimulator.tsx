@@ -58,7 +58,7 @@ const FinanceSimulator: React.FC<FinanceSimulatorProps> = ({ user }) => {
       setIsInitialLoad(false);
     };
     loadData();
-  }, [user.id]);
+  }, [user]);
 
   // Handle currency change
   useEffect(() => {

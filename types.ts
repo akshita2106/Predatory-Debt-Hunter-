@@ -46,10 +46,12 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  phone?: string;
   photoURL?: string;
   currency: string;
   location?: string;
   occupation?: string;
+  bio?: string;
   hasCompletedSetup: boolean;
   settings?: UserSettings;
 }

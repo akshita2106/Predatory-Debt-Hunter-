@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { User, UserSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, UserSettings, FinancialProfile, ExpenseCategory } from '../types';
 import { debtService } from '../services/debtService';
-import { Save, Trash2, Shield, Bell, Globe, CreditCard, Check } from 'lucide-react';
+import { financeService } from '../services/financeService';
+import { Save, Trash2, Shield, Bell, Globe, User as UserIcon, Wallet, Check, Phone, Mail, Briefcase, MapPin, Plus, X } from 'lucide-react';
+import { convertFromBase, convertToBase } from '../services/currencyUtils';
 
 interface SettingsProps {
   user: User;
@@ -14,15 +16,80 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
     currencySymbol: '$',
     currencyCode: 'USD'
   });
-  const [activeSection, setActiveSection] = useState<'general' | 'privacy' | 'notifications'>('general');
+  const [profile, setProfile] = useState<User>(user);
+  const [financialProfile, setFinancialProfile] = useState<FinancialProfile>({
+    userId: user.id,
+    monthlySalary: 0,
+    currentSavings: 0,
+    expenses: [],
+    updatedAt: Date.now()
+  });
+  
+  const [activeSection, setActiveSection] = useState<'profile' | 'financial' | 'general' | 'privacy' | 'notifications'>('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchFinancialProfile = async () => {
+      const fp = await financeService.getFinancialProfile(user.id);
+      if (fp) {
+        // Convert from base (USD) to current currency for editing
+        const converted = {
+          ...fp,
+          monthlySalary: convertFromBase(fp.monthlySalary, settings.currencyCode),
+          currentSavings: convertFromBase(fp.currentSavings, settings.currencyCode),
+          expenses: fp.expenses.map(e => ({
+            ...e,
+            amount: convertFromBase(e.amount, settings.currencyCode)
+          }))
+        };
+        setFinancialProfile(converted);
+      }
+    };
+    fetchFinancialProfile();
+  }, [user.id, settings.currencyCode]);
+
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // 1. Save Settings
       await debtService.saveSettings(user.id, settings);
-      onUpdateUser({ ...user, settings });
+      
+      // 2. Save User Profile
+      await financeService.saveUserProfile(profile);
+      
+      // 3. Save Financial Profile (Convert back to base USD)
+      const baseFinancialProfile = {
+        ...financialProfile,
+        monthlySalary: convertToBase(financialProfile.monthlySalary, settings.currencyCode),
+        currentSavings: convertToBase(financialProfile.currentSavings, settings.currencyCode),
+        expenses: financialProfile.expenses.map(e => ({
+          ...e,
+          amount: convertToBase(e.amount, settings.currencyCode)
+        }))
+      };
+      await financeService.saveFinancialProfile(baseFinancialProfile);
+      
+      onUpdateUser({ ...profile, settings });
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
@@ -30,6 +97,32 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const addExpense = () => {
+    const newExpense: ExpenseCategory = {
+      id: crypto.randomUUID(),
+      name: 'New Category',
+      amount: 0
+    };
+    setFinancialProfile({
+      ...financialProfile,
+      expenses: [...financialProfile.expenses, newExpense]
+    });
+  };
+
+  const removeExpense = (id: string) => {
+    setFinancialProfile({
+      ...financialProfile,
+      expenses: financialProfile.expenses.filter(e => e.id !== id)
+    });
+  };
+
+  const updateExpense = (id: string, updates: Partial<ExpenseCategory>) => {
+    setFinancialProfile({
+      ...financialProfile,
+      expenses: financialProfile.expenses.map(e => e.id === id ? { ...e, ...updates } : e)
+    });
   };
 
   const currencies = [
@@ -46,17 +139,31 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
     <div className="max-w-4xl mx-auto animate-fade-in pb-20">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2">Settings</h2>
-        <p className="text-slate-400">Manage your preferences and application configuration.</p>
+        <p className="text-slate-400">Manage your profile, financial data, and application preferences.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Navigation */}
         <div className="space-y-1">
           <button 
+            onClick={() => setActiveSection('profile')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${activeSection === 'profile' ? 'bg-slate-800 text-white border-slate-700 shadow-lg' : 'text-slate-400 border-transparent hover:bg-slate-800/50'}`}
+          >
+            <UserIcon size={18} className={activeSection === 'profile' ? 'text-blue-400' : ''} />
+            <span className="font-medium">User Profile</span>
+          </button>
+          <button 
+            onClick={() => setActiveSection('financial')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${activeSection === 'financial' ? 'bg-slate-800 text-white border-slate-700 shadow-lg' : 'text-slate-400 border-transparent hover:bg-slate-800/50'}`}
+          >
+            <Wallet size={18} className={activeSection === 'financial' ? 'text-emerald-400' : ''} />
+            <span className="font-medium">Financial Profile</span>
+          </button>
+          <button 
             onClick={() => setActiveSection('general')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${activeSection === 'general' ? 'bg-slate-800 text-white border-slate-700 shadow-lg' : 'text-slate-400 border-transparent hover:bg-slate-800/50'}`}
           >
-            <Globe size={18} className={activeSection === 'general' ? 'text-blue-400' : ''} />
+            <Globe size={18} className={activeSection === 'general' ? 'text-indigo-400' : ''} />
             <span className="font-medium">General & Localization</span>
           </button>
           <button 
@@ -77,13 +184,180 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
 
         {/* Content */}
         <div className="md:col-span-2 space-y-6">
+          {activeSection === 'profile' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              <div className="p-6 border-b border-slate-800 bg-slate-800/30">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <UserIcon size={18} className="text-blue-400" />
+                  User Profile
+                </h3>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Full Name</label>
+                    <div className="relative">
+                      <UserIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-colors"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Email Address</label>
+                    <div className="relative">
+                      <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="email"
+                        value={profile.email}
+                        disabled
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-slate-500 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Phone Number</label>
+                    <div className="relative">
+                      <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="tel"
+                        value={profile.phone || ''}
+                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-colors"
+                        placeholder="+1 (555) 000-0000"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Occupation</label>
+                    <div className="relative">
+                      <Briefcase size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        value={profile.occupation || ''}
+                        onChange={(e) => setProfile({ ...profile, occupation: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-colors"
+                        placeholder="Software Engineer"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Location</label>
+                  <div className="relative">
+                    <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={profile.location || ''}
+                      onChange={(e) => setProfile({ ...profile, location: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-colors"
+                      placeholder="New York, NY"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Short Bio</label>
+                  <textarea
+                    value={profile.bio || ''}
+                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-blue-500 outline-none transition-colors h-24 resize-none"
+                    placeholder="Tell us a bit about yourself..."
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'financial' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              <div className="p-6 border-b border-slate-800 bg-slate-800/30">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <Wallet size={18} className="text-emerald-400" />
+                  Financial Profile
+                </h3>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Monthly Salary ({settings.currencySymbol})</label>
+                    <input
+                      type="number"
+                      value={financialProfile.monthlySalary}
+                      onChange={(e) => setFinancialProfile({ ...financialProfile, monthlySalary: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-emerald-500 outline-none transition-colors text-xl font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Current Savings ({settings.currencySymbol})</label>
+                    <input
+                      type="number"
+                      value={financialProfile.currentSavings}
+                      onChange={(e) => setFinancialProfile({ ...financialProfile, currentSavings: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-emerald-500 outline-none transition-colors text-xl font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider">Monthly Expenses</label>
+                    <button 
+                      onClick={addExpense}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <Plus size={14} />
+                      Add Category
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {financialProfile.expenses.map((expense) => (
+                      <div key={expense.id} className="flex items-center gap-3 group">
+                        <input
+                          type="text"
+                          value={expense.name}
+                          onChange={(e) => updateExpense(expense.id, { name: e.target.value })}
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:border-emerald-500 outline-none transition-colors"
+                          placeholder="Category Name"
+                        />
+                        <div className="relative w-32">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">{settings.currencySymbol}</span>
+                          <input
+                            type="number"
+                            value={expense.amount}
+                            onChange={(e) => updateExpense(expense.id, { amount: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-8 pr-3 text-white focus:border-emerald-500 outline-none transition-colors text-right"
+                          />
+                        </div>
+                        <button 
+                          onClick={() => removeExpense(expense.id)}
+                          className="p-2.5 text-slate-600 hover:text-red-400 transition-colors"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    ))}
+                    {financialProfile.expenses.length === 0 && (
+                      <div className="text-center py-8 border-2 border-dashed border-slate-800 rounded-2xl">
+                        <p className="text-slate-500 text-sm italic">No expense categories added yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeSection === 'general' && (
             <>
               {/* Localization Section */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                 <div className="p-6 border-b border-slate-800 bg-slate-800/30">
                   <h3 className="font-bold text-white flex items-center gap-2">
-                    <Globe size={18} className="text-blue-400" />
+                    <Globe size={18} className="text-indigo-400" />
                     Localization
                   </h3>
                 </div>
@@ -99,7 +373,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
                           className={`
                             p-3 rounded-xl border text-left transition-all
                             ${settings.currencyCode === curr.code 
-                              ? 'bg-blue-600/10 border-blue-500 text-white ring-1 ring-blue-500' 
+                              ? 'bg-indigo-600/10 border-indigo-500 text-white ring-1 ring-indigo-500' 
                               : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-600'}
                           `}
                         >
@@ -117,7 +391,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
                       type="text"
                       value={settings.currencySymbol}
                       onChange={(e) => setSettings({ ...settings, currencySymbol: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-blue-500 outline-none transition-colors"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none transition-colors"
                       placeholder="$"
                     />
                   </div>
@@ -167,9 +441,21 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser }) => {
               <Bell size={48} className="text-amber-500 mx-auto mb-4 opacity-20" />
               <h3 className="text-xl font-bold text-white mb-2">Notification Preferences</h3>
               <p className="text-slate-400 max-w-sm mx-auto">Configure how you want to be alerted about upcoming due dates and predatory risks.</p>
-              <button className="mt-8 px-6 py-2 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors">
-                Enable Browser Notifications
-              </button>
+              
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button className="px-6 py-2 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors">
+                  Enable Browser Notifications
+                </button>
+                
+                {deferredPrompt && (
+                  <button 
+                    onClick={handleInstallApp}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-900/20"
+                  >
+                    Install App
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

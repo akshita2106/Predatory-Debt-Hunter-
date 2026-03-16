@@ -1,7 +1,8 @@
 import { GoogleGenAI, Schema } from "@google/genai";
 import { DocumentAnalysis, RiskLevel } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = process.env.API_KEY || '';
+const ai = new GoogleGenAI({ apiKey });
 
 // Helper to convert file to base64
 export const fileToGenerativePart = async (file: File): Promise<string> => {

@@ -18,6 +18,8 @@ root.render(
   </React.StrictMode>
 );
 
+// Service worker removed to prevent caching issues on mobile
+/*
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js')
@@ -29,3 +31,4 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+*/

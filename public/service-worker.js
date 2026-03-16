@@ -1,29 +1,22 @@
-const CACHE_NAME = 'debt-hunter-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/index.css',
-  '/manifest.json',
-  '/favicon.ico'
-];
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
 
-self.addEventListener('install', event => {
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          return caches.delete(cacheName);
+        })
+      );
+    }).then(() => {
+      return self.clients.claim();
+    })
   );
 });
 
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
-  );
+  // Always fetch from network
+  event.respondWith(fetch(event.request));
 });

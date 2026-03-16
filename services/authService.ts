@@ -1,12 +1,12 @@
 import { auth, db } from '../firebase';
 import { 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  User as FirebaseUser,
-  browserLocalPersistence,
-  setPersistence
+  User as FirebaseUser
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { User } from "../types";
@@ -14,13 +14,17 @@ import { handleFirestoreError, OperationType, cleanObject } from './firestoreUti
 
 const provider = new GoogleAuthProvider();
 
+// Helper to detect mobile devices
+const isMobile = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 export const authService = {
-  async signInWithGoogle(): Promise<User> {
-    await setPersistence(auth, browserLocalPersistence);
-    const result = await signInWithPopup(auth, provider);
-    //const firebaseUser = result.user;
-    
-    // Check if user exists in Firestore
+  /**
+   * Helper to ensure a user document exists in Firestore.
+   * This is called by both the sign-in method and the auth state listener.
+   */
+  async _getOrCreateUserDoc(firebaseUser: FirebaseUser): Promise<User> {
     try {
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
       
@@ -45,22 +49,34 @@ export const authService = {
     }
   },
 
+  async signInWithGoogle(): Promise<User | void> {
+    if (isMobile()) {
+      // On mobile, use redirect to avoid sessionStorage/popup issues
+      return await signInWithRedirect(auth, provider);
+    } else {
+      // On desktop, use popup for better UX
+      const result = await signInWithPopup(auth, provider);
+      return await this._getOrCreateUserDoc(result.user);
+    }
+  },
+
   async logout() {
     await signOut(auth);
   },
 
   onAuthStateChange(callback: (user: User | null) => void) {
+    // Check for redirect result on initialization
+    getRedirectResult(auth).catch(error => {
+      console.error("Error handling redirect result", error);
+    });
+
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            callback(userDoc.data() as User);
-          } else {
-            callback(null);
-          }
+          // Ensure the user profile exists in Firestore (handles redirect flow)
+          const user = await this._getOrCreateUserDoc(firebaseUser);
+          callback(user);
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
           callback(null);
         }
       } else {

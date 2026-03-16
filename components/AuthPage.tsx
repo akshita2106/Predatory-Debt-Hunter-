@@ -16,7 +16,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     setError(null);
     try {
       const user = await authService.signInWithGoogle();
-      onLogin(user);
+      if (user) {
+        onLogin(user);
+      }
     } catch (err: any) {
       console.error(err);
       setError("Failed to sign in with Google. Please try again.");

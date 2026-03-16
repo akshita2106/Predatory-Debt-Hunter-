@@ -50,13 +50,30 @@ export const authService = {
   },
 
   async signInWithGoogle(): Promise<User | void> {
-    if (isMobile()) {
-      // On mobile, use redirect to avoid sessionStorage/popup issues
-      return await signInWithRedirect(auth, provider);
-    } else {
-      // On desktop, use popup for better UX
-      const result = await signInWithPopup(auth, provider);
-      return await this._getOrCreateUserDoc(result.user);
+    try {
+      if (isMobile()) {
+        // On mobile, use redirect to avoid sessionStorage/popup issues
+        // We wrap it in a try-catch to handle immediate failures
+        return await signInWithRedirect(auth, provider);
+      } else {
+        // On desktop, use popup for better UX
+        const result = await signInWithPopup(auth, provider);
+        return await this._getOrCreateUserDoc(result.user);
+      }
+    } catch (error: any) {
+      console.error("Sign in error:", error);
+      
+      // If redirect fails immediately or we detect a storage issue, 
+      // we can try popup as a last resort even on mobile
+      if (isMobile() && (error.code === 'auth/operation-not-supported-in-this-environment' || error.message?.includes('storage'))) {
+        try {
+          const result = await signInWithPopup(auth, provider);
+          return await this._getOrCreateUserDoc(result.user);
+        } catch (popupError) {
+          throw popupError;
+        }
+      }
+      throw error;
     }
   },
 
@@ -66,8 +83,16 @@ export const authService = {
 
   onAuthStateChange(callback: (user: User | null) => void) {
     // Check for redirect result on initialization
-    getRedirectResult(auth).catch(error => {
-      console.error("Error handling redirect result", error);
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        await this._getOrCreateUserDoc(result.user);
+      }
+    }).catch(error => {
+      console.error("Error handling redirect result:", error);
+      // Specific handling for the error in the screenshot
+      if (error.message?.includes('missing initial state')) {
+        console.warn("Detected missing initial state. This is common in some mobile browsers. Retrying with popup might be necessary.");
+      }
     });
 
     return onAuthStateChanged(auth, async (firebaseUser) => {

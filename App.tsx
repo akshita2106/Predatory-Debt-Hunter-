@@ -28,9 +28,12 @@ const App: React.FC = () => {
   // Check for existing session on load
   useEffect(() => {
     console.log("App: Initializing auth listener");
-    const unsubscribe = authService.onAuthStateChange((user) => {
-      console.log("App: Auth state changed", user ? user.email : "null");
-      setCurrentUser(user);
+    const unsubscribe = authService.onAuthStateChange(async (user) => {
+      console.log("App: Auth state changed", user ? user.id : "null");
+      if (user) {
+        setCurrentUser(user);
+      }
+      // Always mark auth as ready so we can show either the app or the login page
       setIsAuthReady(true);
     });
     return () => unsubscribe();

@@ -80,12 +80,34 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == request.resource.data.userId;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin' ||
+          (request.auth.token.get('email', '') == "akshitashah2106@gmail.com" && 
+           request.auth.token.get('email_verified', false) == true));
+    }
+
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == resource.data.userId;
+    }
+
     function hasOnlyAllowedFields(allowedFields) {
       return request.resource.data.keys().hasOnly(allowedFields);
     }
 
     function hasRequiredFields(requiredFields) {
       return request.resource.data.keys().hasAll(requiredFields);
+    }
+
+    function validString(field, maxLen) {
+      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
     }
 
     // ===============================================================
@@ -98,8 +120,11 @@ service cloud.firestore {
              data.name is string &&
              data.currency is string &&
              data.hasCompletedSetup is bool &&
-             data.name.size() < 200 &&
-             data.email.size() < 200;
+             data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email.size() <= 150 &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 100)) &&
+             (!('occupation' in data) || (data.occupation is string && data.occupation.size() <= 100)) &&
+             (!('role' in data) || (data.role is string && data.role.size() <= 20));
     }
 
     function isValidFinancialProfile(data) {
@@ -107,7 +132,8 @@ service cloud.firestore {
              data.monthlySalary is number &&
              data.currentSavings is number &&
              data.expenses is list &&
-             data.updatedAt is number;
+             data.updatedAt is number &&
+             data.expenses.size() <= 50;
     }
 
     function isValidSavedScenario(data) {
@@ -118,7 +144,9 @@ service cloud.firestore {
              data.savings is number &&
              data.expenses is list &&
              data.scenarioType is string &&
-             data.timestamp is number;
+             data.timestamp is number &&
+             data.name.size() <= 100 &&
+             data.expenses.size() <= 50;
     }
 
     function isValidDebtTask(data) {
@@ -127,7 +155,9 @@ service cloud.firestore {
              data.amount is number &&
              data.status is string &&
              data.createdAt is number &&
-             data.title.size() < 200;
+             data.title.size() > 0 && data.title.size() <= 150 &&
+             (!('issuer' in data) || (data.issuer is string && data.issuer.size() <= 100)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
     }
 
     // ===============================================================
@@ -135,32 +165,33 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
-      allow delete: if false; // Users shouldn't be able to delete their profiles easily
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.get('role', 'user') == 'user');
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.get('role', 'user') == resource.data.get('role', 'user') || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /financialProfiles/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidFinancialProfile(request.resource.data);
       allow update: if isOwner(userId) && isValidFinancialProfile(request.resource.data);
-      allow delete: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     match /savedScenarios/{scenarioId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidSavedScenario(request.resource.data);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidSavedScenario(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     match /debts/{debtId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow list: if isAuthenticated() && request.query.limit <= 100; // Basic list protection, query must filter by userId
+      allow read: if (isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidDebtTask(request.resource.data);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidDebtTask(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     // Default deny

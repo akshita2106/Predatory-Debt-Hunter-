@@ -1,9 +1,6 @@
 import { auth, db } from '../firebase';
 import { 
-  signInWithPopup, 
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider, 
+  signInAnonymously,
   signOut, 
   onAuthStateChanged,
   User as FirebaseUser
@@ -12,46 +9,27 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { User } from "../types";
 import { handleFirestoreError, OperationType, cleanObject } from './firestoreUtils';
 
-const provider = new GoogleAuthProvider();
-provider.setCustomParameters({
-  prompt: 'select_account'
-});
-
-// Helper to detect mobile devices or tablets
-const isMobile = () => {
-  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || 
-         (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform));
-};
-
-// Helper to detect if running in a WebView (common in APKs)
-const isWebView = () => {
-  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-  return /wv|Version\/[\d\.]+/.test(userAgent) || (isMobile() && !/Chrome|Safari/i.test(userAgent));
-};
-
 export const authService = {
   /**
    * Helper to ensure a user document exists in Firestore.
-   * This is called by both the sign-in method and the auth state listener.
    */
   async _getOrCreateUserDoc(firebaseUser: FirebaseUser): Promise<User> {
     try {
-      console.log("Fetching/Creating user doc for:", firebaseUser.uid);
+      console.log("Fetching/Creating user doc for anonymous ID:", firebaseUser.uid);
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
       
       if (userDoc.exists()) {
         console.log("User doc exists");
         return userDoc.data() as User;
       } else {
-        console.log("Creating new user doc");
-        // Create new user profile
+        console.log("Creating new anonymous user doc");
+        // Create new user profile for anonymous user
         const newUser: User = {
           id: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: firebaseUser.displayName || 'User',
-          photoURL: firebaseUser.photoURL || undefined,
-          currency: 'USD', // Default
+          email: 'anonymous@user.local', // Placeholder for anonymous
+          name: 'Guest User', // Default name
+          photoURL: undefined,
+          currency: 'USD',
           hasCompletedSetup: false
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), cleanObject(newUser));
@@ -64,36 +42,42 @@ export const authService = {
     }
   },
 
-  async signInWithGoogle(): Promise<User | void> {
+  /**
+   * Signs in as a demo user with pre-configured settings.
+   */
+  async signInAsDemo(): Promise<User> {
     try {
-      // In WebViews/APKs, popups are almost always blocked or fail.
-      // Redirect is safer, but we need to handle the storage issues.
-      if (isMobile() || isWebView()) {
-        console.log("Mobile/WebView detected, using redirect flow");
-        try {
-          return await signInWithRedirect(auth, provider);
-        } catch (redirectError: any) {
-          console.error("Redirect failed immediately:", redirectError);
-          // Fallback to popup if redirect fails immediately (rare)
-          if (redirectError.code === 'auth/operation-not-supported-in-this-environment') {
-             const result = await signInWithPopup(auth, provider);
-             return await this._getOrCreateUserDoc(result.user);
-          }
-          throw redirectError;
+      console.log("Attempting demo sign-in...");
+      const result = await signInAnonymously(auth);
+      const firebaseUser = result.user;
+      
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      
+      if (userDoc.exists() && (userDoc.data() as User).hasCompletedSetup) {
+        return userDoc.data() as User;
+      }
+
+      // Create a pre-configured demo user
+      const demoUser: User = {
+        id: firebaseUser.uid,
+        email: 'demo@debt-hunter.ai',
+        name: 'Demo User',
+        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=demo',
+        currency: 'USD',
+        hasCompletedSetup: true, // Skip setup
+        location: 'New York, USA',
+        occupation: 'Product Tester',
+        settings: {
+          deleteCompletedAfterDays: 30,
+          currencySymbol: '$',
+          currencyCode: 'USD'
         }
-      } else {
-        console.log("Desktop detected, using popup flow");
-        const result = await signInWithPopup(auth, provider);
-        return await this._getOrCreateUserDoc(result.user);
-      }
+      };
+      
+      await setDoc(doc(db, 'users', firebaseUser.uid), cleanObject(demoUser));
+      return demoUser;
     } catch (error: any) {
-      console.error("Sign in error:", error);
-      
-      // Handle "Session Storage" or "Web Storage" errors specifically
-      if (error.code === 'auth/web-storage-unsupported' || error.message?.includes('storage')) {
-        alert("Your browser settings are restricting storage, which is needed for login. Please enable cookies/local storage or try a different browser.");
-      }
-      
+      console.error("Demo sign-in error:", error);
       throw error;
     }
   },
@@ -103,24 +87,9 @@ export const authService = {
   },
 
   onAuthStateChange(callback: (user: User | null) => void) {
-    // Check for redirect result on initialization
-    // This is CRITICAL for mobile/APK flows
-    getRedirectResult(auth).then(async (result) => {
-      if (result?.user) {
-        console.log("Redirect result found for user:", result.user.uid);
-        const user = await this._getOrCreateUserDoc(result.user);
-        callback(user);
-      }
-    }).catch(error => {
-      console.error("Error handling redirect result:", error);
-      // If we get a "missing initial state" error, it often means the redirect 
-      // was interrupted or storage was cleared. We don't necessarily want to 
-      // show an error to the user yet, as onAuthStateChanged might still pick up the session.
-    });
-
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        console.log("Auth state changed: User logged in", firebaseUser.uid);
+        console.log("Auth state changed: User logged in (Anonymous)", firebaseUser.uid);
         try {
           const user = await this._getOrCreateUserDoc(firebaseUser);
           callback(user);
@@ -129,7 +98,8 @@ export const authService = {
           callback(null);
         }
       } else {
-        console.log("Auth state changed: No user");
+        console.log("Auth state changed: No user, triggering auto-login...");
+        // If no user, we can trigger the auto-login here or in the component
         callback(null);
       }
     });

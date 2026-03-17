@@ -24,6 +24,12 @@ const isMobile = () => {
          (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform));
 };
 
+// Helper to detect if running in a WebView (common in APKs)
+const isWebView = () => {
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  return /wv|Version\/[\d\.]+/.test(userAgent) || (isMobile() && !/Chrome|Safari/i.test(userAgent));
+};
+
 export const authService = {
   /**
    * Helper to ensure a user document exists in Firestore.
@@ -60,28 +66,34 @@ export const authService = {
 
   async signInWithGoogle(): Promise<User | void> {
     try {
-      if (isMobile()) {
-        console.log("Mobile detected, using redirect");
-        return await signInWithRedirect(auth, provider);
+      // In WebViews/APKs, popups are almost always blocked or fail.
+      // Redirect is safer, but we need to handle the storage issues.
+      if (isMobile() || isWebView()) {
+        console.log("Mobile/WebView detected, using redirect flow");
+        try {
+          return await signInWithRedirect(auth, provider);
+        } catch (redirectError: any) {
+          console.error("Redirect failed immediately:", redirectError);
+          // Fallback to popup if redirect fails immediately (rare)
+          if (redirectError.code === 'auth/operation-not-supported-in-this-environment') {
+             const result = await signInWithPopup(auth, provider);
+             return await this._getOrCreateUserDoc(result.user);
+          }
+          throw redirectError;
+        }
       } else {
-        console.log("Desktop detected, using popup");
+        console.log("Desktop detected, using popup flow");
         const result = await signInWithPopup(auth, provider);
         return await this._getOrCreateUserDoc(result.user);
       }
     } catch (error: any) {
       console.error("Sign in error:", error);
       
-      // If redirect fails immediately or we detect a storage issue, 
-      // we can try popup as a last resort even on mobile
-      if (isMobile() && (error.code === 'auth/operation-not-supported-in-this-environment' || error.message?.includes('storage'))) {
-        try {
-          console.log("Redirect failed or unsupported, trying popup fallback");
-          const result = await signInWithPopup(auth, provider);
-          return await this._getOrCreateUserDoc(result.user);
-        } catch (popupError) {
-          throw popupError;
-        }
+      // Handle "Session Storage" or "Web Storage" errors specifically
+      if (error.code === 'auth/web-storage-unsupported' || error.message?.includes('storage')) {
+        alert("Your browser settings are restricting storage, which is needed for login. Please enable cookies/local storage or try a different browser.");
       }
+      
       throw error;
     }
   },
@@ -92,13 +104,18 @@ export const authService = {
 
   onAuthStateChange(callback: (user: User | null) => void) {
     // Check for redirect result on initialization
+    // This is CRITICAL for mobile/APK flows
     getRedirectResult(auth).then(async (result) => {
       if (result?.user) {
         console.log("Redirect result found for user:", result.user.uid);
-        await this._getOrCreateUserDoc(result.user);
+        const user = await this._getOrCreateUserDoc(result.user);
+        callback(user);
       }
     }).catch(error => {
       console.error("Error handling redirect result:", error);
+      // If we get a "missing initial state" error, it often means the redirect 
+      // was interrupted or storage was cleared. We don't necessarily want to 
+      // show an error to the user yet, as onAuthStateChanged might still pick up the session.
     });
 
     return onAuthStateChanged(auth, async (firebaseUser) => {
@@ -109,9 +126,6 @@ export const authService = {
           callback(user);
         } catch (error) {
           console.error("Failed to sync user doc on auth change:", error);
-          // If we can't get the doc, we might still want to show the user as logged in
-          // but the app expects a full User object. 
-          // For now, we call callback(null) to force a retry/login if it's a fatal error
           callback(null);
         }
       } else {

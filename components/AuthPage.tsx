@@ -30,6 +30,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         setError("Sign-in request was cancelled. Please try again.");
       } else if (err.code === 'auth/popup-blocked') {
         setError("Sign-in popup was blocked by your browser. Please allow popups for this site.");
+      } else if (err.code === 'auth/web-storage-unsupported' || err.message?.includes('storage')) {
+        setError("Your browser settings are restricting storage (cookies/local storage), which is required for login. Please enable them or try a different browser.");
       } else {
         setError("Failed to sign in with Google. Please try again.");
       }

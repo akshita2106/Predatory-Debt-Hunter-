@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Upload, Camera, FileText, Loader2, AlertTriangle, ScanLine } from 'lucide-react';
-import { analyzeDocument } from '../services/geminiService';
+import { Upload, Camera, FileText, Loader2, AlertTriangle, ScanLine, Sparkles, ChevronRight } from 'lucide-react';
+import { analyzeDocument, analyzeDemoDocument } from '../services/geminiService';
 import { DocumentAnalysis } from '../types';
 
 interface DocumentScannerProps {
@@ -30,6 +30,21 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({ onAnalysisComplete })
       // Reset inputs
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  };
+
+  const handleDemoScan = async (type: 'payday' | 'credit' | 'medical') => {
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      // Small delay to simulate processing
+      await new Promise(r => setTimeout(r, 2000));
+      const result = await analyzeDemoDocument(type);
+      onAnalysisComplete(result);
+    } catch (err) {
+      setError("Demo analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -98,6 +113,53 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({ onAnalysisComplete })
               accept="image/*,.pdf" 
               className="hidden" 
             />
+        </div>
+      </div>
+
+      {/* Demo Options */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <Sparkles size={48} className="text-blue-400" />
+        </div>
+        
+        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Sparkles size={18} className="text-blue-400" />
+          Try Demo Scenarios
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button 
+            onClick={() => handleDemoScan('payday')}
+            className="flex items-center justify-between p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all group"
+          >
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Payday Loan</p>
+              <p className="text-[10px] text-slate-500 uppercase">Predatory Trap</p>
+            </div>
+            <ChevronRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
+          </button>
+          
+          <button 
+            onClick={() => handleDemoScan('credit')}
+            className="flex items-center justify-between p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all group"
+          >
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Credit Card</p>
+              <p className="text-[10px] text-slate-500 uppercase">Hidden Fees</p>
+            </div>
+            <ChevronRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
+          </button>
+          
+          <button 
+            onClick={() => handleDemoScan('medical')}
+            className="flex items-center justify-between p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all group"
+          >
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Medical Bill</p>
+              <p className="text-[10px] text-slate-500 uppercase">Overcharged</p>
+            </div>
+            <ChevronRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
+          </button>
         </div>
       </div>
 

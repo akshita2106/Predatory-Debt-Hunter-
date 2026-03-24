@@ -75,6 +75,56 @@ export const authService = {
       };
       
       await setDoc(doc(db, 'users', firebaseUser.uid), cleanObject(demoUser));
+
+      // Seed demo data
+      const demoDebts = [
+        {
+          id: crypto.randomUUID(),
+          userId: firebaseUser.uid,
+          title: 'Payday Advance #402',
+          issuer: 'QuickCash Loans',
+          amount: 50000, // $500.00
+          dueDate: Date.now() + (2 * 24 * 60 * 60 * 1000),
+          category: 'loan',
+          priority: 'urgent',
+          status: 'pending',
+          riskLevel: 'PREDATORY',
+          notes: 'High interest rate detected (400% APR). Hidden rollover fees.',
+          createdAt: Date.now()
+        },
+        {
+          id: crypto.randomUUID(),
+          userId: firebaseUser.uid,
+          title: 'Credit Card Statement',
+          issuer: 'MegaBank',
+          amount: 125000, // $1250.00
+          dueDate: Date.now() + (10 * 24 * 60 * 60 * 1000),
+          category: 'bill',
+          priority: 'normal',
+          status: 'pending',
+          riskLevel: 'CAUTION',
+          notes: 'Late fee is excessive. Minimum payment trap detected.',
+          createdAt: Date.now()
+        }
+      ];
+
+      for (const debt of demoDebts) {
+        await setDoc(doc(db, 'debts', debt.id), debt);
+      }
+
+      const demoProfile = {
+        userId: firebaseUser.uid,
+        monthlySalary: 450000, // $4500
+        currentSavings: 120000, // $1200
+        expenses: [
+          { id: '1', name: 'Rent', amount: 150000 },
+          { id: '2', name: 'Groceries', amount: 40000 },
+          { id: '3', name: 'Utilities', amount: 20000 }
+        ],
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'financialProfiles', firebaseUser.uid), demoProfile);
+
       return demoUser;
     } catch (error: any) {
       console.error("Demo sign-in error:", error);

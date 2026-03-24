@@ -75,6 +75,61 @@ export const analyzeDocument = async (file: File): Promise<DocumentAnalysis> => 
   }
 };
 
+export const analyzeDemoDocument = async (type: 'payday' | 'credit' | 'medical'): Promise<DocumentAnalysis> => {
+  const demoData: Record<string, any> = {
+    payday: {
+      summary: "A high-interest short-term payday loan agreement from 'QuickCash Loans'.",
+      riskScore: 92,
+      riskLevel: "PREDATORY",
+      clauses: [
+        { text: "Annual Percentage Rate (APR) of 400%", type: "danger", explanation: "This is 10x higher than standard bank loans and is designed to keep you in a debt cycle." },
+        { text: "Automatic rollover fee of $50 every 14 days", type: "danger", explanation: "If you don't pay in full, they charge you a fee just to extend the loan, which doesn't reduce your balance." },
+        { text: "Mandatory wage garnishment authorization", type: "warning", explanation: "You are giving them permission to take money directly from your paycheck if you miss a payment." }
+      ],
+      extractedAmounts: [
+        { label: "Principal Amount", amount: "$500.00" },
+        { label: "Total Repayment", amount: "$1,250.00" }
+      ],
+      actionableAdvice: "Do not sign this. This loan is designed to be impossible to pay back. Look for local credit unions or non-profit debt assistance programs instead."
+    },
+    credit: {
+      summary: "A 'MegaBank' credit card statement with hidden penalty terms.",
+      riskScore: 45,
+      riskLevel: "CAUTION",
+      clauses: [
+        { text: "Late payment fee of $45", type: "warning", explanation: "This fee is at the legal maximum and can be triggered by being just one hour late." },
+        { text: "Penalty APR of 29.99% triggered after one late payment", type: "danger", explanation: "One mistake will double your interest rate permanently." }
+      ],
+      extractedAmounts: [
+        { label: "Minimum Payment", amount: "$35.00" },
+        { label: "Statement Balance", amount: "$1,250.00" }
+      ],
+      actionableAdvice: "Pay more than the minimum. At this rate, paying only the minimum will take 15 years to clear the balance. Set up auto-pay to avoid the penalty APR."
+    },
+    medical: {
+      summary: "An itemized medical bill from 'City General Hospital'.",
+      riskScore: 65,
+      riskLevel: "PREDATORY",
+      clauses: [
+        { text: "Uncoded 'Administrative Supply' fee of $450", type: "danger", explanation: "This is a common 'junk fee' used to inflate bills without providing specific services." },
+        { text: "Interest accrual starts 30 days from billing date", type: "warning", explanation: "Most hospitals allow 90 days before interest starts. This is an aggressive collection tactic." }
+      ],
+      extractedAmounts: [
+        { label: "Total Charges", amount: "$4,200.00" },
+        { label: "Insurance Adjustment", amount: "$0.00" }
+      ],
+      actionableAdvice: "Request an itemized bill with CPT codes. Call the billing department and ask for 'Financial Assistance' or 'Charity Care'—they are legally required to offer it if you meet income limits."
+    }
+  };
+
+  return {
+    id: crypto.randomUUID(),
+    fileName: `demo_${type}.pdf`,
+    timestamp: Date.now(),
+    ...demoData[type]
+  };
+};
+
 export const generateNegotiationContent = async (
   docContext: DocumentAnalysis,
   type: 'email' | 'script' | 'letter',
